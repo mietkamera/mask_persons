@@ -133,3 +133,7 @@ dmypy.json
 
 # Tensorflow Model
 model/mk_default_model.h5
+
+# Images
+input.png
+output.png

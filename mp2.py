@@ -1,6 +1,7 @@
 #!/usr/local/bin/env/bin/python3
 
 import getopt, sys, os
+import pathlib
 
 def fileExists(filename):
 
@@ -17,16 +18,18 @@ def fileExists(filename):
 cwd = os.getcwd() 
 inputFilename = ''
 outputFilename = ''
+work_dir = str(pathlib.Path(__file__).parent.absolute())
+modelFilename = work_dir + '/model/mk_default_model.h5'
 
 # Remove 1st argument from the
 # list of command line arguments
 argumentList = sys.argv[1:]
    
 # Options
-options = "hi:o:"
+options = "hi:o:m:"
     
 # Long options
-long_options = ["help", "input=", "output="]
+long_options = ["help", "input=", "output=", "model="]
      
 try:
     # Parsing argument
@@ -56,6 +59,11 @@ try:
                 print (outputFilename, " already exists!")
                 exit(2)
                                                                                                                                 
+        elif currentArgument in ("-m", "--model"):
+            if currentValue.startswith('/'):
+                modelFilename = currentValue
+            else:
+                modelFilename = str(cwd) + '/' + currentValue
                                                                                                                                     
 except getopt.error as err:
     # output error, and return with an error code
@@ -75,7 +83,18 @@ if outputFilename == '':
     print("Output-Filename not specified")
     exit(4)
 
+if not fileExists(modelFilename):
+    print ("Model ", modelFilename, " doesn't exist!")
+    exit(5)
 
+#suppress tensorflow warnings
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' 
+
+basename = os.path.basename(outputFilename)
+dirname = os.path.dirname(outputFilename)
+filename, extension = os.path.splitext(basename)
+
+maskFilename = dirname + '/' + filename + '_mask.png'
 
 
 from tensorflow import keras
@@ -85,49 +104,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import glob
 import random
-import pathlib
-
-
-
-# Get the current working 
-# directory (CWD) 
-    
-
-
-
-
-
-work_dir = str(pathlib.Path(__file__).parent.absolute())
-
-model_file = work_dir + '/model/mk_default_model.h5'
-
-#model_file = '/content/drive/MyDrive/ML/mk_model_transfer_learning_11.h5'
-#imgs_path = '/content/drive/MyDrive/ML/imgs_test_2/resize/'
-imgs_path = work_dir + '/'
-#output_path = '/content/drive/MyDrive/ML/prediction_tmp/'
-#output_path = '/content/drive/MyDrive/ML/imgs_test_2/prediction/'
-output_path = work_dir + '/prediction/'
-
-#filename = work_dir + '/test.png'
 
 
 
 # import Model
-model = keras.models.load_model(model_file, compile=False)
+model = keras.models.load_model(modelFilename, compile=False)
 
-#image_list = sorted(glob.glob(imgs_path + "*.png"))
-
-#if len(image_list) > 0:
-#      image_number = random.randint(0, len(image_list)-1)
-##else:
-#        image_number = 0
-
-#image_path = image_list[image_number]
-        #image_path = image_list[0]
-
-image_path = filename
-
-large_image = cv2.imread(image_path)
+large_image = cv2.imread(inputFilename)
 
 #print("Large Image Shape:", large_image.shape)
 
@@ -140,4 +123,59 @@ images = np.array(patches_img)
 images = np.squeeze(images)
 
 #print("images.shape squeeze", images.shape)
+
+
+
+pred_patches = []
+
+for i in range(images.shape[0]):
+    for j in range(images.shape[1]):
+        #print(i,j)
+                                
+        single_patch = images[i,j,:,:,:]
+
+        #print(single_patch.shape)
+        single_patch = (single_patch.astype('float32')) / 255.
+
+        single_patch = np.expand_dims(single_patch, axis=0)
+        #print("predict: ", j)
+        prediction = model.predict(single_patch)
+
+        pred_patches.append(prediction)
+
+
+pred_patches = np.array(pred_patches)
+#print("pred_patches.shape:",pred_patches.shape)
+pred_patches = np.squeeze(pred_patches, axis=1)
+#print("pred_patches.shape, squeeze:",pred_patches.shape)
+
+pred_patches = np.reshape(pred_patches,(4, 4, 256, 256, 1))
+
+pred_patches = np.expand_dims(pred_patches, axis=2)
+#print("pred_patches.shape", pred_patches.shape)
+prediction = unpatchify(pred_patches, (1024, 1024, 1))
+#print("prediction.shape - unpatchify", prediction.shape)
+
+prediction_squeeze = np.squeeze(prediction, axis=2)
+#print("prediction_squeeze.shape", prediction_squeeze.shape)
+
+
+prediction_int = prediction_squeeze * 255
+prediction_int = prediction_int.astype(np.uint8)
+
+
+# blur image
+
+blur = cv2.blur(large_image,(15,15),0)
+out = large_image.copy()
+out[prediction_int>0] = blur[prediction_int>0]
+
+# save images
+
+cv2.imwrite(maskFilename, prediction_int)
+cv2.imwrite(outputFilename, out)
+
+
+
+
 
