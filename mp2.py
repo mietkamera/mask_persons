@@ -39,7 +39,24 @@ try:
     for currentArgument, currentValue in arguments:
                                    
         if currentArgument in ("-h", "--help"):
-            print ("Displaying Help")
+            print ('''
+Prediction
+==========
+
+Parameters:
+
+	--input, -i		required, Image-Filename of source-Image
+		
+	--ouput, -o	        required, Output-Filename for Image (prediction)
+
+	--model, -m		optional, Path to Model-File
+
+				default:	model/mk_default_model.h5
+				
+	--help, -h		Displaying this Help
+
+            ''')
+            exit()
                                                                        
         elif currentArgument in ("-i", "--input"):
             if currentValue.startswith('/'):
